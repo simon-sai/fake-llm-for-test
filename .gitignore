@@ -1,0 +1,8 @@
+# Local planning docs
+llm-requirements.md
+fake-llm-plan.html
+
+# Node / Wrangler
+node_modules/
+.wrangler/
+.dev.vars
