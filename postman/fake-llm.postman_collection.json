@@ -1,0 +1,597 @@
+{
+  "info": {
+    "name": "Fake LLM",
+    "description": "OpenAI-compatible fake LLM (Cloudflare Worker).\n\nVariables: `baseUrl` (server root, no /v1) and `apiKey`. The home page, GET /health, and CORS preflight are public. Model API requests require the key. The defaults point to the local server started by start-local.cmd (key from .dev.vars). Import an environment from this folder to switch to the deployed Worker.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://local.fake-llm.here:8787"
+    },
+    {
+      "key": "apiKey",
+      "value": "dev-key"
+    },
+    {
+      "key": "chatModel",
+      "value": "fake-chat"
+    },
+    {
+      "key": "embedModel",
+      "value": "fake-embed"
+    }
+  ],
+  "item": [
+    {
+      "name": "Home and health",
+      "item": [
+        {
+          "name": "Home page (no auth)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"200 HTML docs without a key\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.headers.get('Content-Type')).to.include('text/html');",
+                  "  pm.expect(pm.response.text()).to.include('Fake LLM API');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health (no auth)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 and ok: true', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().ok).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List models",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1/models"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('lists the fake models', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const ids = pm.response.json().data.map(m => m.id);",
+                  "  pm.expect(ids).to.include.members(['fake-chat', 'fake-embed', 'fake-reject', 'fake-slow']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Chat completions",
+      "item": [
+        {
+          "name": "Chat (non-stream)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"{{chatModel}}\",\n  \"messages\": [\n    { \"role\": \"system\", \"content\": \"You are a helpful assistant.\" },\n    { \"role\": \"user\", \"content\": \"Hello, who are you?\" }\n  ],\n  \"temperature\": 0.2,\n  \"max_tokens\": 100\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('chat.completion with an assistant message', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const j = pm.response.json();",
+                  "  pm.expect(j.object).to.eql('chat.completion');",
+                  "  pm.expect(j.choices[0].message.role).to.eql('assistant');",
+                  "  pm.expect(j.choices[0].message.content).to.include('Hello');",
+                  "  pm.expect(j.choices[0].finish_reason).to.eql('stop');",
+                  "  pm.expect(j.usage.total_tokens).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chat (stream, SSE)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"{{chatModel}}\",\n  \"stream\": true,\n  \"stream_options\": { \"include_usage\": true },\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"Stream a test answer\" }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('SSE stream ends with [DONE]', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.headers.get('Content-Type')).to.include('text/event-stream');",
+                  "  const body = pm.response.text();",
+                  "  pm.expect(body).to.include('chat.completion.chunk');",
+                  "  pm.expect(body).to.include('\"usage\"');",
+                  "  pm.expect(body.trim().endsWith('data: [DONE]')).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chat (multimodal content parts)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"{{chatModel}}\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": [ { \"type\": \"text\", \"text\": \"Question as content parts\" } ] }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('reads text from content parts', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().choices[0].message.content).to.include('content parts');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Chat (Azure-style path)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "api-key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": "{{baseUrl}}/openai/deployments/{{chatModel}}/chat/completions?api-version=2024-10-21",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"Azure-style call\" }\n  ]\n}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Azure path + api-key header work\", () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().object).to.eql('chat.completion');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Embeddings",
+      "item": [
+        {
+          "name": "Embeddings (single input)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/embeddings",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"{{embedModel}}\",\n  \"input\": \"Explore fake embedding test\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('one 1536-dim unit vector', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const v = pm.response.json().data[0].embedding;",
+                  "  pm.expect(v).to.have.lengthOf(1536);",
+                  "  const norm = Math.sqrt(v.reduce((s, x) => s + x * x, 0));",
+                  "  pm.expect(norm).to.be.closeTo(1, 1e-3);",
+                  "});",
+                  "const first = pm.response.json().data[0].embedding.slice(0, 5).join(',');",
+                  "const prev = pm.collectionVariables.get('embedFingerprint');",
+                  "if (prev) pm.test('same input gives same vector', () => pm.expect(first).to.eql(prev));",
+                  "pm.collectionVariables.set('embedFingerprint', first);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Embeddings (batch)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/embeddings",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"{{embedModel}}\",\n  \"input\": [\"passage 1\", \"passage 2\", \"passage 3\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('one vector per input, in order', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const d = pm.response.json().data;",
+                  "  pm.expect(d).to.have.lengthOf(3);",
+                  "  pm.expect(d.map(x => x.index)).to.eql([0, 1, 2]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Embeddings (base64, like the OpenAI SDK)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/embeddings",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"{{embedModel}}\",\n  \"input\": \"base64 test\",\n  \"encoding_format\": \"base64\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('base64 string of 1536 float32 values', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const b64 = pm.response.json().data[0].embedding;",
+                  "  pm.expect(b64).to.be.a('string');",
+                  "  pm.expect(atob(b64).length).to.eql(1536 * 4);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Embeddings (dimensions = 256)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/embeddings",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"{{embedModel}}\",\n  \"input\": \"short vector\",\n  \"dimensions\": 256\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('256-dim vector', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data[0].embedding).to.have.lengthOf(256);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Responses API",
+      "item": [
+        {
+          "name": "Responses (string input)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/responses",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"{{chatModel}}\",\n  \"input\": \"Summarise this document\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('completed response with output_text', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const j = pm.response.json();",
+                  "  pm.expect(j.object).to.eql('response');",
+                  "  pm.expect(j.status).to.eql('completed');",
+                  "  pm.expect(j.output[0].content[0].type).to.eql('output_text');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Error scenarios",
+      "item": [
+        {
+          "name": "Rejected model (fake-reject)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"fake-reject\",\n  \"messages\": [ { \"role\": \"user\", \"content\": \"hi\" } ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('404 model_not_found', () => {",
+                  "  pm.response.to.have.status(404);",
+                  "  pm.expect(pm.response.json().error.code).to.eql('model_not_found');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Slow model (fake-slow, ~5s)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"fake-slow\",\n  \"messages\": [ { \"role\": \"user\", \"content\": \"take your time\" } ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('answers after about 5 seconds', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.responseTime).to.be.above(4500);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Missing API key",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"{{chatModel}}\",\n  \"messages\": [ { \"role\": \"user\", \"content\": \"hi\" } ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"401 missing_api_key\", () => {",
+                  "  pm.response.to.have.status(401);",
+                  "  pm.expect(pm.response.json().error.code).to.eql('missing_api_key');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Wrong API key",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "wrong-key",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/v1/chat/completions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"{{chatModel}}\",\n  \"messages\": [ { \"role\": \"user\", \"content\": \"hi\" } ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"401 invalid_api_key\", () => {",
+                  "  pm.response.to.have.status(401);",
+                  "  pm.expect(pm.response.json().error.code).to.eql('invalid_api_key');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unknown path",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/v1/does-not-exist"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('404 not_found', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Wrong method (GET chat)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v1/chat/completions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('405 method_not_allowed', () => pm.response.to.have.status(405));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{apiKey}}",
+        "type": "string"
+      }
+    ]
+  }
+}
