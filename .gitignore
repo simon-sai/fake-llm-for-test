@@ -6,3 +6,6 @@ fake-llm-plan.html
 node_modules/
 .wrangler/
 .dev.vars
+.dev.vars.*
+.env
+.env.*

@@ -33,18 +33,21 @@ Azure-style paths (`/openai/deployments/<name>/chat/completions`) work too.
 ## Run locally
 
 On Windows, run `start-local.cmd` (or `start-local.cmd 9000` for another port). It maps `local.fake-llm.here` to
-`127.0.0.1` in the hosts file (asks for admin rights once), creates `.dev.vars` with `API_KEY=dev-key` if it is
-missing, and serves the API at `http://local.fake-llm.here:8787/v1`.
+`127.0.0.1` in the hosts file (asks for admin rights once), prepares `.env`, and serves the API at
+`http://local.fake-llm.here:8787/v1`. If `.env` is missing, the launcher copies an existing `.dev.vars` or
+creates `.env` with `API_KEY=dev-key`.
 
-Manual start:
+For manual setup, create `.env` in the project root and set `API_KEY=dev-key` or your own local key.
+The Worker checks each protected request against the configured key without a database.
 
 ```bash
 npm install
-echo "API_KEY=dev-key" > .dev.vars
-npx wrangler dev        # http://localhost:8787
+npm run dev             # http://localhost:8787
 ```
 
 ## Deploy
+
+For a deployed Cloudflare Worker, set `API_KEY` as a Worker secret. The local `.env` supplies the key for local development.
 
 ```bash
 npx wrangler login

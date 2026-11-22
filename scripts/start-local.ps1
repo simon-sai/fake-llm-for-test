@@ -27,18 +27,21 @@ if (-not (Select-String -Path $hostsFile -Pattern $pattern -Quiet)) {
 if (-not (Test-Path "node_modules")) { npm install }
 
 # 3. local API key (never committed, see .gitignore)
-if (-not (Test-Path ".dev.vars")) {
-  Set-Content -Path ".dev.vars" -Value "API_KEY=dev-key" -Encoding ascii
-  Write-Host "Created .dev.vars with API_KEY=dev-key"
+if (-not (Test-Path ".env")) {
+  if (Test-Path ".dev.vars") {
+    Copy-Item -LiteralPath ".dev.vars" -Destination ".env"
+    Write-Host "Copied local configuration from .dev.vars to .env"
+  } else {
+    Set-Content -Path ".env" -Value "API_KEY=dev-key" -Encoding ascii
+    Write-Host "Created .env with a development API key"
+  }
 }
-$apiKey = ((Get-Content ".dev.vars" | Where-Object { $_ -match "^\s*API_KEY\s*=" } | Select-Object -First 1) -replace "^\s*API_KEY\s*=\s*", "").Trim('"', "'", " ")
-if (-not $apiKey) { throw ".dev.vars has no API_KEY line. Add one, e.g. API_KEY=dev-key" }
 
 Write-Host ""
 Write-Host "Fake LLM: http://${HostName}:$Port/v1"
-Write-Host "API key:  $apiKey   (from .dev.vars)"
+Write-Host "API key configuration: .env"
 Write-Host "Docs:     http://${HostName}:$Port/"
 Write-Host "Stop with Ctrl+C"
 Write-Host ""
 
-npx wrangler dev --ip 127.0.0.1 --port $Port
+npm.cmd run dev -- --ip 127.0.0.1 --port $Port
