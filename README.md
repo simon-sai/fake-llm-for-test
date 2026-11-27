@@ -25,14 +25,30 @@ Azure-style paths (`/openai/deployments/<name>/chat/completions`) work too.
 
 | Model id | Behaviour |
 | --- | --- |
-| `fake-chat` | Answers with a fixed text that echoes the last user message |
+| `fake-chat` | Answers with a fixed text that echoes the last user message, except for Explore EQA prompts (below) |
 | `fake-embed` | Same input always gives the same vector |
 | `fake-reject` | Always returns 404 `model_not_found` |
 | `fake-slow` | Answers after about 5 seconds |
 
+## Explore EQA prompts
+
+Explore's Enterprise Q&A tags each prompt with `_name`. `src/eqa.ts` gives minimal answers so a question about one
+node type of the graph ("List the names of all product categories.") gets a real answer:
+
+| `_name` | Answer |
+| --- | --- |
+| `conversationprofiling` | `{"summary": "User asks: <question>", "guideline": ""}` |
+| `validatequestion` | `1, graph` (route the question to the graph data) |
+| `cypherplan` | One task for the node type the question names last, returning its name-like properties |
+| `cyphergen` | ``MATCH (n:`<Node>`) WHERE n.startsOn > 0 RETURN … LIMIT 200`` |
+| `generateanswer` | Markdown tables of the query results Explore sends in the prompt |
+
+The answer only repeats data Explore retrieved from the project's graph; nothing is invented. Other prompts get the
+generic fake answer.
+
 ## Run locally
 
-On Windows, run `start-local.cmd` (or `start-local.cmd 9000` for another port). It maps `local.fake-llm.here` to
+On Windows, run `auto-cli\start-local.bat` (or `auto-cli\start-local.bat 9000` for another port). It maps `local.fake-llm.here` to
 `127.0.0.1` in the hosts file (asks for admin rights once), prepares `.env`, and serves the API at
 `http://local.fake-llm.here:8787/v1`. If `.env` is missing, the launcher copies an existing `.dev.vars` or
 creates `.env` with `API_KEY=dev-key`.

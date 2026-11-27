@@ -1,3 +1,4 @@
+import { eqaAnswer } from "./eqa";
 import { homePage } from "./home";
 
 export interface Env {
@@ -6,7 +7,7 @@ export interface Env {
 }
 
 export const MODELS = [
-  { id: "fake-chat", type: "chat", behaviour: "Fixed answer that echoes the last user message" },
+  { id: "fake-chat", type: "chat", behaviour: "Fixed answer that echoes the last user message; minimal answers to Explore EQA prompts (graph questions)" },
   { id: "fake-embed", type: "embedding", behaviour: "Deterministic unit vector per input (same input, same vector)" },
   { id: "fake-reject", type: "chat / embedding", behaviour: "Always returns 404 model_not_found" },
   { id: "fake-slow", type: "chat", behaviour: "Like fake-chat, but answers after about 5 seconds" },
@@ -71,7 +72,7 @@ async function chat(body: any, model: string) {
   if (model.endsWith("fake-slow")) await sleep(5000);
 
   const q = lastUserText(body.messages);
-  const answer = `[fake-llm] This is a fake answer to: "${q.slice(0, 200)}"`;
+  const answer = eqaAnswer(body.messages) ?? `[fake-llm] This is a fake answer to: "${q.slice(0, 200)}"`;
   const pt = tokens(JSON.stringify(body.messages ?? "")), ct = tokens(answer);
   const usage = { prompt_tokens: pt, completion_tokens: ct, total_tokens: pt + ct };
   const cid = id("chatcmpl"), created = now();

@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Fake LLM",
-    "description": "OpenAI-compatible fake LLM (Cloudflare Worker).\n\nVariables: `baseUrl` (server root, no /v1) and `apiKey`. The home page, GET /health, and CORS preflight are public. Model API requests require the key. The defaults point to the local server started by start-local.cmd (key from .env). Import an environment from this folder to switch to the deployed Worker.",
+    "description": "OpenAI-compatible fake LLM (Cloudflare Worker).\n\nVariables: `baseUrl` (server root, no /v1) and `apiKey`. The home page, GET /health, and CORS preflight are public. Model API requests require the key. The defaults point to the local server started by auto-cli\\start-local.bat (key from .env). Import an environment from this folder to switch to the deployed Worker.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
